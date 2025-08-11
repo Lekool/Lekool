@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    Card Name (e.g., Chase Sapphire): <input type="text" id="cardName" style="width: 150px; margin-bottom: 10px;"/>
+    <br>
+    Select a CSV file: <input type="file" id="csvFile" accept=".csv" />
+    <br><br>
+    <button onclick="uploadFile()">Upload</button>
+
+    <script>
+      function uploadFile() {
+        const cardName = document.getElementById('cardName').value;
+        if (!cardName) {
+          alert('Please enter a card name.');
+          return;
+        }
+
+        const file = document.getElementById('csvFile').files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const contents = e.target.result;
+            google.script.run
+              .withSuccessHandler(() => {
+                alert('File uploaded and processed successfully!');
+                google.script.host.close();
+              })
+              .withFailureHandler(err => {
+                alert('Error: ' + err.message);
+                google.script.host.close();
+              })
+              .processUploadedCsv(contents, cardName);
+          };
+          reader.readAsText(file);
+        } else {
+          alert('Please select a file.');
+        }
+      }
+    </script>
+  </body>
+</html>
