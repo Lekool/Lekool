@@ -1,8 +1,5 @@
 /**
  * @OnlyCurrentDoc
- *
- * The above comment directs App Script to limit the scope of file access for this script to the document
- * that it is bound to.
  */
 
 /**
@@ -12,12 +9,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
       .createMenu('Finance Tool')
       .addItem('Setup Sheet', 'setupSheet')
-      .addSeparator()
       .addItem('Load New File', 'loadNewFile')
-      .addItem('Export Data', 'exportData')
-      .addSeparator()
-      .addItem('Clear Sheet', 'clearSheet')
-      .addItem('Delete Current Row', 'deleteCurrentRow')
       .addToUi();
 }
 
@@ -44,34 +36,6 @@ function setupSheet() {
 }
 
 /**
- * Clears all data from the sheet, leaving the header row intact.
- */
-function clearSheet() {
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert('Are you sure you want to clear all data?', ui.ButtonSet.YES_NO);
-
-  if (response == ui.Button.YES) {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    const range = sheet.getRange(2, 1, sheet.getLastRow(), sheet.getLastColumn());
-    range.clearContent();
-    ui.alert('Sheet cleared.');
-  }
-}
-
-/**
- * Deletes the currently selected row.
- */
-function deleteCurrentRow() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const activeRange = sheet.getActiveRange();
-  if (activeRange.getRow() > 1) { // Do not delete header row
-    sheet.deleteRow(activeRange.getRow());
-  } else {
-    SpreadsheetApp.getUi().alert('Cannot delete the header row.');
-  }
-}
-
-/**
  * Shows an HTML dialog to allow the user to upload a CSV file.
  */
 function loadNewFile() {
@@ -89,38 +53,56 @@ function loadNewFile() {
  * @param {string} cardName The name of the card provided by the user.
  */
 function processUploadedCsv(csvContent, cardName) {
+  // 1. Process the newly uploaded file
   const parsedData = parseCsv(csvContent);
-  if (parsedData.length < 2) { // Must have header and at least one data row
+  if (parsedData.length < 2) {
     throw new Error('The CSV file appears to be empty or does not contain any transaction data.');
   }
-
   const headers = parsedData[0].map(h => h.trim());
   const dataRows = parsedData.slice(1);
+  let newlyProcessedRows;
 
-  let processedData;
-
-  // Detect file type and validate headers
   if (headers.includes('Transaction Date') && headers.includes('Post Date')) {
-    // Chase format
     const requiredChaseHeaders = ['Transaction Date', 'Post Date', 'Description', 'Category', 'Type', 'Amount'];
     validateHeaders(headers, requiredChaseHeaders);
-    processedData = processChaseData(dataRows, headers, cardName);
+    newlyProcessedRows = processChaseData(dataRows, headers, cardName);
   } else if (headers.includes('Card Member')) {
-    // Amex format
     const requiredAmexHeaders = ['Date', 'Description', 'Card Member', 'Amount'];
     validateHeaders(headers, requiredAmexHeaders);
-    processedData = processAmexData(dataRows, headers, cardName);
+    newlyProcessedRows = processAmexData(dataRows, headers, cardName);
   } else {
-    throw new Error('Could not determine file type. The file does not seem to be a supported Chase or Amex statement. Please check the file headers.');
+    throw new Error('Could not determine file type. The file does not seem to be a supported Chase or Amex statement.');
   }
 
-  if (processedData.length > 0) {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    sheet.getRange(sheet.getLastRow() + 1, 1, processedData.length, processedData[0].length)
-         .setValues(processedData);
-  } else {
-    // This can happen if the file has a header but all data rows are invalid (e.g. summary rows)
+  if (newlyProcessedRows.length === 0) {
     throw new Error('The file was processed, but no valid transaction rows were found.');
+  }
+
+  // 2. Read existing data from the sheet
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  let existingData = [];
+  if (sheet.getLastRow() > 1) {
+    existingData = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  }
+
+  // 3. Combine new and existing data
+  const combinedData = existingData.concat(newlyProcessedRows);
+
+  // 4. Sort the combined data (Post Date at index 1, Transaction Date at index 0)
+  combinedData.sort((a, b) => {
+    const dateA = (a[1] instanceof Date) ? a[1] : a[0];
+    const dateB = (b[1] instanceof Date) ? b[1] : b[0];
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  // 5. Clear the old data from the sheet
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+  }
+
+  // 6. Write the sorted data back to the sheet
+  if (combinedData.length > 0) {
+    sheet.getRange(2, 1, combinedData.length, combinedData[0].length).setValues(combinedData);
   }
 }
 
@@ -141,6 +123,35 @@ function validateHeaders(actualHeaders, requiredHeaders) {
   }
 }
 
+/**
+ * Parses a date string in yyyy/mm/dd format into a Date object.
+ * @param {string} dateString - The date string to parse.
+ * @returns {Date|null} A Date object, or null if the format is invalid.
+ */
+function parseYyyyMmDd(dateString) {
+  if (!dateString || typeof dateString !== 'string') {
+    return null;
+  }
+  const parts = dateString.split('/');
+  if (parts.length !== 3) {
+    return null;
+  }
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed in JS Date
+  const day = parseInt(parts[2], 10);
+
+  if (isNaN(year) || isNaN(month) || isNaN(day)) {
+    return null;
+  }
+
+  const date = new Date(year, month, day);
+  // Verify that the created date matches the input parts to catch invalid dates like 2023/02/30
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
+    return null;
+  }
+  return date;
+}
+
 function processChaseData(rows, headers, cardName) {
   const transactionDateIndex = headers.indexOf('Transaction Date');
   const postDateIndex = headers.indexOf('Post Date');
@@ -153,30 +164,33 @@ function processChaseData(rows, headers, cardName) {
     .filter(row => row.length > amountIndex && row[transactionDateIndex] && row[amountIndex])
     .map(row => {
       try {
-        // Sanitize amount: remove $, ,, then parse
         const amountStr = row[amountIndex].replace(/[\$,]/g, '');
         const amount = parseFloat(amountStr);
-        if (isNaN(amount)) {
-          return null; // Skip rows where amount is not a number
+        if (isNaN(amount)) return null;
+
+        const transactionDate = parseYyyyMmDd(row[transactionDateIndex]);
+        const postDate = parseYyyyMmDd(row[postDateIndex]);
+        if (!transactionDate || !postDate) {
+          console.error(`Skipping row due to invalid date format: ${row}`);
+          return null;
         }
 
         return [
-          row[transactionDateIndex], // Transaction Date
-          row[postDateIndex],       // Post Date
-          row[descriptionIndex],    // Description
-          row[categoryIndex],       // Category
-          row[typeIndex],           // Type
-          -amount,                  // Amount (inverted)
-          cardName,                 // Card
-          ''                        // Notes
+          transactionDate,
+          postDate,
+          row[descriptionIndex],
+          row[categoryIndex],
+          row[typeIndex],
+          -amount,
+          cardName,
+          ''
         ];
       } catch (e) {
-        // Log error for the specific row and skip it
         console.error(`Skipping invalid Chase row: ${row}. Error: ${e.message}`);
         return null;
       }
     })
-    .filter(row => row !== null); // Filter out the rows that were skipped
+    .filter(row => row !== null);
 
   return processedRows;
 }
@@ -191,30 +205,32 @@ function processAmexData(rows, headers, cardName) {
     .filter(row => row.length > amountIndex && row[dateIndex] && row[amountIndex])
     .map(row => {
       try {
-        // Sanitize amount: remove $, ,, then parse
         const amountStr = row[amountIndex].replace(/[\$,]/g, '');
         const amount = parseFloat(amountStr);
-        if (isNaN(amount)) {
-          return null; // Skip rows where amount is not a number
+        if (isNaN(amount)) return null;
+
+        const transactionDate = parseYyyyMmDd(row[dateIndex]);
+        if (!transactionDate) {
+          console.error(`Skipping row due to invalid date format: ${row}`);
+          return null;
         }
 
         return [
-          row[dateIndex],           // Transaction Date
-          '',                       // Post Date
-          row[descriptionIndex],    // Description
-          '',                       // Category
-          '',                       // Type
-          amount,                   // Amount
-          cardName,                 // Card
-          row[cardMemberIndex]      // Notes
+          transactionDate,
+          '',
+          row[descriptionIndex],
+          '',
+          '',
+          amount,
+          cardName,
+          row[cardMemberIndex]
         ];
       } catch (e) {
-        // Log error for the specific row and skip it
         console.error(`Skipping invalid Amex row: ${row}. Error: ${e.message}`);
         return null;
       }
     })
-    .filter(row => row !== null); // Filter out the rows that were skipped
+    .filter(row => row !== null);
 
   return processedRows;
 }
@@ -225,7 +241,7 @@ function processAmexData(rows, headers, cardName) {
  * @returns {Array<Array<string>>} A 2D array of the parsed data.
  */
 function parseCsv(csvContent) {
-  const lines = csvContent.trim().split('\n');
+  const lines = csvContent.trim().split(/\r\n?|\n/);
   // This regex splits by commas, but ignores commas inside double quotes.
   const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
   return lines
@@ -236,27 +252,4 @@ function parseCsv(csvContent) {
         return field.trim().replace(/^"|"$/g, '').trim();
       });
   });
-}
-
-/**
- * Exports the current data to a new Google Sheet.
- */
-function exportData() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    SpreadsheetApp.getUi().alert('There is no data to export.');
-    return;
-  }
-
-  const newSpreadsheet = SpreadsheetApp.create('Exported Transactions');
-  const newSheet = newSpreadsheet.getSheets()[0];
-  newSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
-
-  const url = newSpreadsheet.getUrl();
-  const htmlOutput = HtmlService.createHtmlOutput(`<p>Data exported successfully. <a href="${url}" target="_blank">Open new sheet</a>.</p>`)
-      .setWidth(300)
-      .setHeight(80);
-  SpreadsheetApp.getUi().showModalDialog(htmlOutput, 'Export Complete');
 }
