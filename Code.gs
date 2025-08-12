@@ -26,13 +26,12 @@ function setupSheet() {
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
   // Format date columns
-  sheet.getRange('A:A').setNumberFormat('yyyy-mm-dd');
-  sheet.getRange('B:B').setNumberFormat('yyyy-mm-dd');
+  sheet.getRange('A:B').setNumberFormat('MM/dd/yyyy');
 
   // Freeze the header row
   sheet.setFrozenRows(1);
 
-  SpreadsheetApp.getUi().alert('Sheet setup complete!');
+  SpreadsheetApp.getUi().alert('Sheet setup complete! The date format has been set to MM/dd/yyyy.');
 }
 
 /**
@@ -124,6 +123,32 @@ function validateHeaders(actualHeaders, requiredHeaders) {
 }
 
 /**
+ * A universal date parser that tries multiple formats.
+ * @param {string} dateString - The date string to parse.
+ * @returns {Date|null} A Date object, or null if parsing fails.
+ */
+function parseDateUniversal(dateString) {
+  if (!dateString || typeof dateString !== 'string') {
+    return null;
+  }
+
+  // First, try the default constructor, which is flexible (handles MM/DD/YYYY, etc.)
+  let date = new Date(dateString);
+  if (date && !isNaN(date.getTime())) {
+    return date;
+  }
+
+  // If that fails, try our specific yyyy/mm/dd parser
+  date = parseYyyyMmDd(dateString);
+  if (date && !isNaN(date.getTime())) {
+    return date;
+  }
+
+  return null; // Return null if all attempts fail
+}
+
+
+/**
  * Parses a date string in yyyy/mm/dd format into a Date object.
  * @param {string} dateString - The date string to parse.
  * @returns {Date|null} A Date object, or null if the format is invalid.
@@ -168,8 +193,8 @@ function processChaseData(rows, headers, cardName) {
         const amount = parseFloat(amountStr);
         if (isNaN(amount)) return null;
 
-        const transactionDate = parseYyyyMmDd(row[transactionDateIndex]);
-        const postDate = parseYyyyMmDd(row[postDateIndex]);
+        const transactionDate = parseDateUniversal(row[transactionDateIndex]);
+        const postDate = parseDateUniversal(row[postDateIndex]);
         if (!transactionDate || !postDate) {
           console.error(`Skipping row due to invalid date format: ${row}`);
           return null;
@@ -209,7 +234,7 @@ function processAmexData(rows, headers, cardName) {
         const amount = parseFloat(amountStr);
         if (isNaN(amount)) return null;
 
-        const transactionDate = parseYyyyMmDd(row[dateIndex]);
+        const transactionDate = parseDateUniversal(row[dateIndex]);
         if (!transactionDate) {
           console.error(`Skipping row due to invalid date format: ${row}`);
           return null;
