@@ -2,32 +2,80 @@
 <html>
   <head>
     <base target="_top">
+    <style>
+      body { font-family: Arial, sans-serif; }
+      #drop_zone {
+        border: 2px dashed #ccc;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        color: #666;
+        transition: border-color 0.3s;
+      }
+      #drop_zone.dragover {
+        border-color: #3367d6;
+      }
+      p { margin: 5px 0; }
+    </style>
   </head>
   <body>
-    Card Name (e.g., Chase Sapphire): <input type="text" id="cardName" style="width: 150px; margin-bottom: 10px;"/>
-    <br>
-    Select a CSV file: <input type="file" id="csvFile" accept=".csv" />
-    <br><br>
-    <button onclick="uploadFile()">Upload</button>
+    Card Name (e.g., Chase Sapphire): <input type="text" id="cardName" style="width: 100%; box-sizing: border-box; margin-bottom: 10px;"/>
+    <div id="drop_zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleFileDrop(event)">
+      <p>Drag & drop a CSV file here</p>
+      <p>or</p>
+      <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)" />
+    </div>
 
     <script>
-      function uploadFile() {
+      const dropZone = document.getElementById('drop_zone');
+      const fileInput = document.getElementById('csvFile');
+
+      function handleDragOver(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        dropZone.classList.add('dragover');
+      }
+
+      function handleDragLeave(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+      }
+
+      function handleFileDrop(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+        const files = event.dataTransfer.files;
+        if (files.length > 0) {
+          fileInput.files = files; // Assign dropped files to the input
+          uploadFile(files[0]);
+        }
+      }
+
+      function handleFileSelect(event) {
+        const files = event.target.files;
+        if (files.length > 0) {
+          uploadFile(files[0]);
+        }
+      }
+
+      function uploadFile(file) {
         const cardName = document.getElementById('cardName').value;
         if (!cardName) {
-          alert('Please enter a card name.');
+          alert('Please enter a card name before selecting or dropping a file.');
+          fileInput.value = ""; // Clear the file input
           return;
         }
 
-        const file = document.getElementById('csvFile').files[0];
-        if (file) {
+        if (file && file.name.toLowerCase().endsWith('.csv')) {
           const reader = new FileReader();
           reader.onload = function(e) {
             const contents = e.target.result;
+            document.body.innerHTML = "<p>Uploading and processing... please wait.</p>";
             google.script.run
-              .withSuccessHandler(() => {
-                alert('File uploaded and processed successfully!');
-                google.script.host.close();
-              })
+              .withSuccessHandler(() => google.script.host.close())
               .withFailureHandler(err => {
                 alert('Error: ' + err.message);
                 google.script.host.close();
@@ -36,7 +84,8 @@
           };
           reader.readAsText(file);
         } else {
-          alert('Please select a file.');
+          alert('Please select a valid CSV file.');
+          fileInput.value = "";
         }
       }
     </script>

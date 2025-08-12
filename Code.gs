@@ -206,7 +206,7 @@ function processChaseData(rows, headers, cardName) {
           row[descriptionIndex],
           row[categoryIndex],
           row[typeIndex],
-          -amount,
+          amount,
           cardName,
           ''
         ];
@@ -246,7 +246,7 @@ function processAmexData(rows, headers, cardName) {
           row[descriptionIndex],
           '',
           '',
-          amount,
+          -amount,
           cardName,
           row[cardMemberIndex]
         ];
