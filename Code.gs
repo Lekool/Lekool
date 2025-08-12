@@ -26,12 +26,12 @@ function setupSheet() {
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
   // Format date columns
-  sheet.getRange('A:B').setNumberFormat('MM/dd/yyyy');
+  sheet.getRange('A:B').setNumberFormat('dd/MM/yyyy');
 
   // Freeze the header row
   sheet.setFrozenRows(1);
 
-  SpreadsheetApp.getUi().alert('Sheet setup complete! The date format has been set to MM/dd/yyyy.');
+  SpreadsheetApp.getUi().alert('Sheet setup complete! The date format has been set to dd/MM/yyyy.');
 }
 
 /**
