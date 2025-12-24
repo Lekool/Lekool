@@ -19,7 +19,7 @@
     </style>
   </head>
   <body>
-    Card Name (e.g., Chase Sapphire): <input type="text" id="cardName" style="width: 100%; box-sizing: border-box; margin-bottom: 10px;"/>
+    Sheet Name (e.g., Chase Sapphire Q3): <input type="text" id="cardName" style="width: 100%; box-sizing: border-box; margin-bottom: 10px;"/>
     <div id="drop_zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleFileDrop(event)">
       <p>Drag & drop a CSV file here</p>
       <p>or</p>
@@ -49,7 +49,7 @@
         dropZone.classList.remove('dragover');
         const files = event.dataTransfer.files;
         if (files.length > 0) {
-          fileInput.files = files; // Assign dropped files to the input
+          fileInput.files = files;
           uploadFile(files[0]);
         }
       }
@@ -64,8 +64,8 @@
       function uploadFile(file) {
         const cardName = document.getElementById('cardName').value;
         if (!cardName) {
-          alert('Please enter a card name before selecting or dropping a file.');
-          fileInput.value = ""; // Clear the file input
+          alert('Please enter a name for the new sheet before selecting or dropping a file.');
+          fileInput.value = "";
           return;
         }
 
