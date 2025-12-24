@@ -42,51 +42,56 @@ function setupNewSheet(sheet) {
  * @param {string} cardName The name for the new sheet, provided by the user.
  */
 function processUploadedCsv(csvContent, cardName) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Check if a sheet with this name already exists
-  if (spreadsheet.getSheetByName(cardName)) {
-    throw new Error(`A sheet named "${cardName}" already exists. Please choose a unique name.`);
-  }
+    // Check if a sheet with this name already exists
+    if (spreadsheet.getSheetByName(cardName)) {
+      throw new Error(`A sheet named "${cardName}" already exists. Please choose a unique name.`);
+    }
 
-  // 1. Process the uploaded file content
-  const parsedData = parseCsv(csvContent);
-  if (parsedData.length < 2) {
-    throw new Error('The CSV file appears to be empty or does not contain any transaction data.');
-  }
-  const headers = parsedData[0].map(h => h.trim());
-  const dataRows = parsedData.slice(1);
-  let processedRows;
+    // 1. Process the uploaded file content
+    const parsedData = parseCsv(csvContent);
+    if (parsedData.length < 2) {
+      throw new Error('The CSV file appears to be empty or does not contain any transaction data.');
+    }
+    const headers = parsedData[0].map(h => h.trim());
+    const dataRows = parsedData.slice(1);
+    let processedRows;
 
-  if (headers.includes('Transaction Date') && headers.includes('Post Date')) {
-    const requiredChaseHeaders = ['Transaction Date', 'Post Date', 'Description', 'Category', 'Type', 'Amount'];
-    validateHeaders(headers, requiredChaseHeaders);
-    processedRows = processChaseData(dataRows, headers, cardName);
-  } else if (headers.includes('Card Member')) {
-    const requiredAmexHeaders = ['Date', 'Description', 'Card Member', 'Amount'];
-    validateHeaders(headers, requiredAmexHeaders);
-    processedRows = processAmexData(dataRows, headers, cardName);
-  } else {
-    throw new Error('Could not determine file type. The file does not seem to be a supported Chase or Amex statement.');
-  }
+    if (headers.includes('Transaction Date') && headers.includes('Post Date')) {
+      const requiredChaseHeaders = ['Transaction Date', 'Post Date', 'Description', 'Category', 'Type', 'Amount'];
+      validateHeaders(headers, requiredChaseHeaders);
+      processedRows = processChaseData(dataRows, headers, cardName);
+    } else if (headers.includes('Card Member')) {
+      const requiredAmexHeaders = ['Date', 'Description', 'Card Member', 'Amount'];
+      validateHeaders(headers, requiredAmexHeaders);
+      processedRows = processAmexData(dataRows, headers, cardName);
+    } else {
+      throw new Error('Could not determine file type. The file does not seem to be a supported Chase or Amex statement.');
+    }
 
-  if (processedRows.length === 0) {
-    throw new Error('The file was processed, but no valid transaction rows were found.');
-  }
+    if (processedRows.length === 0) {
+      throw new Error('The file was processed, but no valid transaction rows were found.');
+    }
 
-  // 2. Sort the processed data (Post Date at index 1, Transaction Date at index 0)
-  processedRows.sort((a, b) => {
-    const dateA = (a[1] instanceof Date) ? a[1] : a[0];
+    // 2. Sort the processed data (Post Date at index 1, Transaction Date at index 0)
+    processedRows.sort((a, b) => {
+      const dateA = (a[1] instanceof Date) ? a[1] : a[0];
     const dateB = (b[1] instanceof Date) ? b[1] : b[0];
-    return dateA.getTime() - dateB.getTime();
-  });
+      return dateA.getTime() - dateB.getTime();
+    });
 
-  // 3. Create a new sheet and set it up
-  const newSheet = spreadsheet.insertSheet(cardName);
-  setupNewSheet(newSheet);
+    // 3. Create a new sheet and set it up
+    const newSheet = spreadsheet.insertSheet(cardName);
+    setupNewSheet(newSheet);
 
-  // 4. Write the sorted data to the new sheet
-  newSheet.getRange(2, 1, processedRows.length, processedRows[0].length).setValues(processedRows);
+    // 4. Write the sorted data to the new sheet
+    newSheet.getRange(2, 1, processedRows.length, processedRows[0].length).setValues(processedRows);
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
 }
 
 // --- Helper Functions ---
