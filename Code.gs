@@ -90,7 +90,7 @@ function processUploadedCsv(csvContent, cardName) {
     newSheet.getRange(2, 1, processedRows.length, processedRows[0].length).setValues(processedRows);
   } catch (e) {
     console.error(e);
-    throw e;
+    throw new Error(e.message);
   }
 }
 
