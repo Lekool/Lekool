@@ -17,8 +17,8 @@ function onOpen() {
  */
 function loadNewFile() {
   const html = HtmlService.createHtmlOutputFromFile('FileUpload')
-      .setWidth(300)
-      .setHeight(150);
+      .setWidth(450)
+      .setHeight(350);
   SpreadsheetApp.getUi().showModalDialog(html, 'Load New Transactions');
 }
 
@@ -42,51 +42,68 @@ function setupNewSheet(sheet) {
  * @param {string} cardName The name for the new sheet, provided by the user.
  */
 function processUploadedCsv(csvContent, cardName) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Check if a sheet with this name already exists
-  if (spreadsheet.getSheetByName(cardName)) {
-    throw new Error(`A sheet named "${cardName}" already exists. Please choose a unique name.`);
+    // Check if a sheet with this name already exists
+    if (spreadsheet.getSheetByName(cardName)) {
+      throw new Error(`A sheet named "${cardName}" already exists. Please choose a unique name.`);
+    }
+
+    // 1. Process the uploaded file content using native Utilities
+    let parsedData;
+    try {
+      // Decode the Base64 string to a blob, then get as string
+      const decodedBlob = Utilities.newBlob(Utilities.base64Decode(csvContent, Utilities.Charset.UTF_8));
+      const decodedString = decodedBlob.getDataAsString();
+      parsedData = Utilities.parseCsv(decodedString);
+    } catch (e) {
+      throw new Error('Failed to parse CSV file. It may be malformed or the encoding failed.');
+    }
+
+    if (!parsedData || parsedData.length < 2) {
+      throw new Error('The CSV file appears to be empty or does not contain any transaction data.');
+    }
+
+    const headers = parsedData[0].map(h => h.trim());
+    const dataRows = parsedData.slice(1);
+    let processedRows;
+
+    if (headers.includes('Transaction Date') && headers.includes('Post Date')) {
+      const requiredChaseHeaders = ['Transaction Date', 'Post Date', 'Description', 'Category', 'Type', 'Amount'];
+      validateHeaders(headers, requiredChaseHeaders);
+      processedRows = processChaseData(dataRows, headers, cardName);
+    } else if (headers.includes('Card Member')) {
+      const requiredAmexHeaders = ['Date', 'Description', 'Card Member', 'Amount'];
+      validateHeaders(headers, requiredAmexHeaders);
+      processedRows = processAmexData(dataRows, headers, cardName);
+    } else {
+      throw new Error('Could not determine file type. The file does not seem to be a supported Chase or Amex statement.');
+    }
+
+    if (processedRows.length === 0) {
+      throw new Error('The file was processed, but no valid transaction rows were found.');
+    }
+
+    // 2. Sort the processed data (Post Date at index 1, Transaction Date at index 0)
+    processedRows.sort((a, b) => {
+      const dateA = (a[1] instanceof Date) ? a[1] : a[0];
+      const dateB = (b[1] instanceof Date) ? b[1] : b[0];
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    // 3. Create a new sheet and set it up
+    const newSheet = spreadsheet.insertSheet(cardName);
+    setupNewSheet(newSheet);
+
+    // 4. Write the sorted data to the new sheet
+    newSheet.getRange(2, 1, processedRows.length, processedRows[0].length).setValues(processedRows);
+
+  } catch (err) {
+    // Re-throw the error so it can be caught by the client-side failure handler
+    // Ensure the message is clean
+    throw new Error(err.message);
   }
-
-  // 1. Process the uploaded file content
-  const parsedData = parseCsv(csvContent);
-  if (parsedData.length < 2) {
-    throw new Error('The CSV file appears to be empty or does not contain any transaction data.');
-  }
-  const headers = parsedData[0].map(h => h.trim());
-  const dataRows = parsedData.slice(1);
-  let processedRows;
-
-  if (headers.includes('Transaction Date') && headers.includes('Post Date')) {
-    const requiredChaseHeaders = ['Transaction Date', 'Post Date', 'Description', 'Category', 'Type', 'Amount'];
-    validateHeaders(headers, requiredChaseHeaders);
-    processedRows = processChaseData(dataRows, headers, cardName);
-  } else if (headers.includes('Card Member')) {
-    const requiredAmexHeaders = ['Date', 'Description', 'Card Member', 'Amount'];
-    validateHeaders(headers, requiredAmexHeaders);
-    processedRows = processAmexData(dataRows, headers, cardName);
-  } else {
-    throw new Error('Could not determine file type. The file does not seem to be a supported Chase or Amex statement.');
-  }
-
-  if (processedRows.length === 0) {
-    throw new Error('The file was processed, but no valid transaction rows were found.');
-  }
-
-  // 2. Sort the processed data (Post Date at index 1, Transaction Date at index 0)
-  processedRows.sort((a, b) => {
-    const dateA = (a[1] instanceof Date) ? a[1] : a[0];
-    const dateB = (b[1] instanceof Date) ? b[1] : b[0];
-    return dateA.getTime() - dateB.getTime();
-  });
-
-  // 3. Create a new sheet and set it up
-  const newSheet = spreadsheet.insertSheet(cardName);
-  setupNewSheet(newSheet);
-
-  // 4. Write the sorted data to the new sheet
-  newSheet.getRange(2, 1, processedRows.length, processedRows[0].length).setValues(processedRows);
 }
 
 // --- Helper Functions ---
@@ -184,18 +201,8 @@ function processAmexData(rows, headers, cardName) {
 }
 
 /**
- * A robust CSV parser that handles quoted fields.
- * @param {string} csvContent The string content of the CSV file.
- * @returns {Array<Array<string>>} A 2D array of the parsed data.
+ * Simple ping function to test client-server connection.
  */
-function parseCsv(csvContent) {
-  const lines = csvContent.trim().split(/\r\n?|\n/);
-  const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-  return lines
-    .filter(line => line.trim() !== '')
-    .map(line => {
-      return line.split(regex).map(field => {
-        return field.trim().replace(/^"|"$/g, '').trim();
-      });
-    });
+function testConnection() {
+  return "Success! The server is reachable.";
 }

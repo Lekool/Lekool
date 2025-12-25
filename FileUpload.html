@@ -1,93 +1,131 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <base target="_top">
-    <style>
-      body { font-family: Arial, sans-serif; }
-      #drop_zone {
-        border: 2px dashed #ccc;
-        border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-        color: #666;
-        transition: border-color 0.3s;
-      }
-      #drop_zone.dragover {
-        border-color: #3367d6;
-      }
-      p { margin: 5px 0; }
-    </style>
-  </head>
-  <body>
-    Sheet Name (e.g., Chase Sapphire Q3): <input type="text" id="cardName" style="width: 100%; box-sizing: border-box; margin-bottom: 10px;"/>
-    <div id="drop_zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleFileDrop(event)">
-      <p>Drag & drop a CSV file here</p>
-      <p>or</p>
-      <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)" />
-    </div>
 
-    <script>
-      const dropZone = document.getElementById('drop_zone');
-      const fileInput = document.getElementById('csvFile');
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
 
-      function handleDragOver(event) {
-        event.stopPropagation();
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-        dropZone.classList.add('dragover');
+    #drop_zone {
+      border: 2px dashed #ccc;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: #666;
+      transition: border-color 0.3s;
+    }
+
+    #drop_zone.dragover {
+      border-color: #3367d6;
+    }
+
+    p {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+
+<body>
+  Sheet Name (e.g., Chase Sapphire Q3): <input type="text" id="cardName"
+    style="width: 100%; box-sizing: border-box; margin-bottom: 10px;" />
+  <div id="drop_zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+    ondrop="handleFileDrop(event)">
+    <p>Drag & drop a CSV file here</p>
+    <p>or</p>
+    <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)" />
+  </div>
+
+  <div style="margin-top: 10px; text-align: center;">
+    <button onclick="runConnectionTest()" style="font-size: 0.8em; color: #666; cursor: pointer;">Test Server
+      Connection</button>
+  </div>
+
+  <script>
+    function runConnectionTest() {
+      alert("Testing connection...");
+      google.script.run
+        .withSuccessHandler(msg => alert(msg))
+        .withFailureHandler(err => alert("Test Failed: " + err.message))
+        .testConnection();
+    }
+
+    const dropZone = document.getElementById('drop_zone');
+    const fileInput = document.getElementById('csvFile');
+
+    function handleDragOver(event) {
+      event.stopPropagation();
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      dropZone.classList.add('dragover');
+    }
+
+    function handleDragLeave(event) {
+      event.stopPropagation();
+      event.preventDefault();
+      dropZone.classList.remove('dragover');
+    }
+
+    function handleFileDrop(event) {
+      event.stopPropagation();
+      event.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = event.dataTransfer.files;
+      if (files.length > 0) {
+        fileInput.files = files;
+        uploadFile(files[0]);
+      }
+    }
+
+    function handleFileSelect(event) {
+      const files = event.target.files;
+      if (files.length > 0) {
+        uploadFile(files[0]);
+      }
+    }
+
+    function uploadFile(file) {
+      const cardName = document.getElementById('cardName').value;
+      if (!cardName) {
+        alert('Please enter a name for the new sheet before selecting or dropping a file.');
+        fileInput.value = "";
+        return;
       }
 
-      function handleDragLeave(event) {
-        event.stopPropagation();
-        event.preventDefault();
-        dropZone.classList.remove('dragover');
+      // Check file size (limit to 10MB to be safe, GAS limit is technically higher but transport is fragile)
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (file.size > MAX_SIZE) {
+        alert('File is too large. Please upload a file smaller than 10MB.');
+        fileInput.value = "";
+        return;
       }
 
-      function handleFileDrop(event) {
-        event.stopPropagation();
-        event.preventDefault();
-        dropZone.classList.remove('dragover');
-        const files = event.dataTransfer.files;
-        if (files.length > 0) {
-          fileInput.files = files;
-          uploadFile(files[0]);
-        }
-      }
+      if (file && file.name.toLowerCase().endsWith('.csv')) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          // e.target.result look like "data:text/csv;base64,....."
+          // We need to strip the prefix to get just the base64 string
+          const result = e.target.result;
+          const base64Content = result.split(',')[1];
 
-      function handleFileSelect(event) {
-        const files = event.target.files;
-        if (files.length > 0) {
-          uploadFile(files[0]);
-        }
+          document.body.innerHTML = "<p>Uploading and processing... please wait.</p>";
+          google.script.run
+            .withSuccessHandler(() => google.script.host.close())
+            .withFailureHandler(err => {
+              alert('Error: ' + err.message);
+              google.script.host.close();
+            })
+            .processUploadedCsv(base64Content, cardName);
+        };
+        // Read as Data URL generates the base64 string automatically
+        reader.readAsDataURL(file);
+      } else {
+        alert('Please select a valid CSV file.');
+        fileInput.value = "";
       }
+    }
+  </script>
+</body>
 
-      function uploadFile(file) {
-        const cardName = document.getElementById('cardName').value;
-        if (!cardName) {
-          alert('Please enter a name for the new sheet before selecting or dropping a file.');
-          fileInput.value = "";
-          return;
-        }
-
-        if (file && file.name.toLowerCase().endsWith('.csv')) {
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            const contents = e.target.result;
-            document.body.innerHTML = "<p>Uploading and processing... please wait.</p>";
-            google.script.run
-              .withSuccessHandler(() => google.script.host.close())
-              .withFailureHandler(err => {
-                alert('Error: ' + err.message);
-                google.script.host.close();
-              })
-              .processUploadedCsv(contents, cardName);
-          };
-          reader.readAsText(file);
-        } else {
-          alert('Please select a valid CSV file.');
-          fileInput.value = "";
-        }
-      }
-    </script>
-  </body>
 </html>
