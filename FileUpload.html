@@ -28,8 +28,13 @@
 </head>
 
 <body>
-  Sheet Name (e.g., Chase Sapphire Q3): <input type="text" id="cardName"
-    style="width: 100%; box-sizing: border-box; margin-bottom: 10px;" />
+  <label for="cardSelect">Card:</label>
+  <select id="cardSelect" onchange="handleCardChange()"
+    style="width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+    <option value="" disabled selected>Loading cards…</option>
+  </select>
+  <input type="text" id="newCardName" placeholder="New card name"
+    style="width: 100%; box-sizing: border-box; margin-bottom: 10px; display: none;" />
   <div id="drop_zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
     ondrop="handleFileDrop(event)">
     <p>Drag & drop a CSV file here</p>
@@ -53,6 +58,58 @@
 
     const dropZone = document.getElementById('drop_zone');
     const fileInput = document.getElementById('csvFile');
+    const cardSelect = document.getElementById('cardSelect');
+    const newCardName = document.getElementById('newCardName');
+
+    const NEW_CARD_VALUE = '__new__';
+
+    // Build the dropdown from the tabs that already exist, plus a "+ New card"
+    // entry. The list is self-maintaining: a tab created by a first upload shows
+    // up here on the next dialog open.
+    function loadCards() {
+      google.script.run
+        .withSuccessHandler(populateCards)
+        .withFailureHandler(() => populateCards([]))
+        .getCardNames();
+    }
+
+    function populateCards(names) {
+      cardSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      placeholder.textContent = names.length ? 'Select a card…' : 'No cards yet — add one';
+      cardSelect.appendChild(placeholder);
+
+      (names || []).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        cardSelect.appendChild(opt);
+      });
+
+      const newOpt = document.createElement('option');
+      newOpt.value = NEW_CARD_VALUE;
+      newOpt.textContent = '+ New card…';
+      cardSelect.appendChild(newOpt);
+    }
+
+    function handleCardChange() {
+      const isNew = cardSelect.value === NEW_CARD_VALUE;
+      newCardName.style.display = isNew ? 'block' : 'none';
+      if (isNew) newCardName.focus();
+    }
+
+    // Resolves the chosen card name from either the dropdown or the new-card box.
+    function resolveCardName() {
+      if (cardSelect.value === NEW_CARD_VALUE) {
+        return newCardName.value.trim();
+      }
+      return cardSelect.value;
+    }
+
+    loadCards();
 
     function handleDragOver(event) {
       event.stopPropagation();
@@ -86,9 +143,9 @@
     }
 
     function uploadFile(file) {
-      const cardName = document.getElementById('cardName').value;
+      const cardName = resolveCardName();
       if (!cardName) {
-        alert('Please enter a name for the new sheet before selecting or dropping a file.');
+        alert('Please choose a card (or add a new one) before selecting or dropping a file.');
         fileInput.value = "";
         return;
       }
@@ -111,7 +168,16 @@
 
           document.body.innerHTML = "<p>Uploading and processing... please wait.</p>";
           google.script.run
-            .withSuccessHandler(() => google.script.host.close())
+            .withSuccessHandler(result => {
+              const added = (result && result.added) || 0;
+              const skipped = (result && result.skipped) || 0;
+              let msg = `Added ${added} transaction${added === 1 ? '' : 's'} to "${cardName}".`;
+              if (skipped > 0) {
+                msg += `\nSkipped ${skipped} duplicate${skipped === 1 ? '' : 's'}.`;
+              }
+              alert(msg);
+              google.script.host.close();
+            })
             .withFailureHandler(err => {
               alert('Error: ' + err.message);
               google.script.host.close();

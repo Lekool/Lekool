@@ -2,18 +2,21 @@
 
 ## Overview
 
-This project is a Google Apps Script-based tool designed to create a personal finance management system within a single Google Sheet. It automates the process of consolidating credit card transaction data from various sources into one unified, sorted, and easy-to-review table.
+This project is a Google Apps Script-based tool designed to create a personal finance management system within a single Google Sheet. It automates the process of consolidating credit card transaction data from various sources into a tidy, per-card, sorted, and easy-to-review set of tabs.
 
 The script is built to handle CSV files from different credit card providers (specifically Chase and American Express), normalize their disparate data formats, and present them in a standardized way.
 
 ## Features
 
-- **Unified Transaction View:** Merges transaction data from multiple credit card CSVs into a single table.
+- **Per-Card Tabs:** Each card gets its own sheet tab. Uploads for a card **append** into that card's existing tab, and the whole tab is re-sorted after every upload.
+- **Card Dropdown:** Pick the card from a dropdown in the upload dialog instead of typing a name each time. The list is self-maintaining — it's built from the tabs that already exist, plus a **"+ New card…"** option for the first upload of a new card.
+- **Duplicate Skipping:** When you upload an overlapping statement period, rows that exactly match an existing row (Transaction Date + Amount + Description + Type) are skipped, and the dialog reports how many were added vs. skipped.
 - **Smart Data Normalization:** Automatically processes data from different providers (Chase, Amex) and standardizes them into a consistent format.
   - Inverts amount signs where necessary to ensure charges are negative and credits/payments are positive.
   - Parses multiple common date formats (`MM/dd/yyyy`, `yyyy/mm/dd`).
+- **Amount Highlighting:** The Amount column is conditionally formatted — light-blue fill for negative amounts (charges), light-green for positive (credits/payments).
 - **Drag-and-Drop File Upload:** A modern, easy-to-use dialog for uploading your CSV files.
-- **Automatic Sorting:** After every file upload, the entire list of transactions is automatically re-sorted in ascending order, prioritizing the `Post Date` and using the `Transaction Date` as a fallback.
+- **Automatic Sorting:** After every file upload, the tab is re-sorted in ascending order, prioritizing the `Post Date` and using the `Transaction Date` as a fallback.
 - **Simple Interface:** All functionality is accessible through a custom "Finance Tool" menu directly within your Google Sheet.
 
 ## Setup Instructions
@@ -36,13 +39,12 @@ To get this tool working in your own Google Sheet, follow these steps carefully.
 
 5.  **Save the Project:** Click the "Save project" icon (which looks like a floppy disk) at the top of the script editor.
 
-6.  **Refresh and Run Setup:**
+6.  **Refresh:**
     *   Go back to your Google Sheet browser tab and **refresh the page**.
     *   A new menu named **"Finance Tool"** should now appear in the menu bar.
-    *   Click `Finance Tool` > `Setup Sheet`.
 
 7.  **Authorize the Script (One-Time Step):**
-    *   The very first time you run a function, Google will ask for your permission. This is a standard security step.
+    *   The first time you run `Finance Tool` > `Load New CSV File`, Google will ask for your permission. This is a standard security step.
     *   A dialog will say "Authorization required." Click **Continue**.
     *   Choose your Google account from the list.
     *   You will likely see a warning screen that says "Google hasn't verified this app." This is expected because you are running your own script. Click on the **"Advanced"** link.
@@ -54,10 +56,12 @@ Your sheet is now ready to use!
 ## How to Use
 
 1.  Click on the **"Finance Tool"** menu.
-2.  Select **"Load New File"**.
-3.  In the dialog box that appears, type a name for the card statement you are uploading (e.g., "Chase Sapphire Q3", "Amex Gold August").
+2.  Select **"Load New CSV File"**.
+3.  In the dialog box, **pick the card** from the dropdown. For a card you haven't uploaded before, choose **"+ New card…"** and type its name (e.g. "Chase Sapphire", "Amex").
 4.  **Drag and drop** your CSV file into the box, or click the file input to select it from your computer.
-5.  The script will show a "processing" message and then automatically add the new transactions, re-sort the entire sheet, and refresh the data.
+5.  The script shows a "processing" message, then appends the new transactions to that card's tab, skips any exact duplicates, re-sorts the tab, and reports how many rows were added vs. skipped.
+
+> **Note:** Because Chase CSVs are identical in format across cards, the tool can't tell your Chase cards apart — the dropdown choice decides which tab the rows land in. Make sure you pick the right card. (It *will* warn you if you drop a Chase file onto an Amex tab, or vice versa.)
 
 ## Supported CSV Formats
 
