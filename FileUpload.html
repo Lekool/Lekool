@@ -24,17 +24,62 @@
     p {
       margin: 5px 0;
     }
+
+    .link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      color: #3367d6;
+      font-size: 0.85em;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    #manageList {
+      margin-top: 6px;
+    }
+
+    .card-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 0.9em;
+    }
+
+    .card-chip button {
+      border: none;
+      background: none;
+      color: #c00;
+      cursor: pointer;
+      font-size: 1em;
+      line-height: 1;
+    }
+
+    .muted {
+      color: #999;
+    }
   </style>
 </head>
 
 <body>
   <label for="cardSelect">Card:</label>
   <select id="cardSelect" onchange="handleCardChange()"
-    style="width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+    style="width: 100%; box-sizing: border-box; margin-bottom: 6px;">
     <option value="" disabled selected>Loading cards…</option>
   </select>
-  <input type="text" id="newCardName" placeholder="New card name"
-    style="width: 100%; box-sizing: border-box; margin-bottom: 10px; display: none;" />
+
+  <div id="newCardRow" style="display: none; margin-bottom: 6px;">
+    <input type="text" id="newCardName" placeholder="New card name"
+      style="width: 68%; box-sizing: border-box;" onkeydown="if(event.key==='Enter'){event.preventDefault();addNewCard();}" />
+    <button onclick="addNewCard()" style="width: 28%;">Add</button>
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <button type="button" class="link-btn" onclick="toggleManage()">Manage cards</button>
+    <div id="manageList" style="display: none;"></div>
+  </div>
+
   <div id="drop_zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
     ondrop="handleFileDrop(event)">
     <p>Drag & drop a CSV file here</p>
@@ -60,29 +105,39 @@
     const fileInput = document.getElementById('csvFile');
     const cardSelect = document.getElementById('cardSelect');
     const newCardName = document.getElementById('newCardName');
+    const newCardRow = document.getElementById('newCardRow');
+    const manageList = document.getElementById('manageList');
 
     const NEW_CARD_VALUE = '__new__';
 
-    // Build the dropdown from the tabs that already exist, plus a "+ New card"
-    // entry. The list is self-maintaining: a tab created by a first upload shows
-    // up here on the next dialog open.
+    // The dropdown is a fixed set of pinned defaults plus the user's added cards,
+    // served by getCardNames() — it is NOT derived from the sheet tabs, so stray
+    // tabs never appear. `custom` are the removable ones.
+    let customCards = [];
+
     function loadCards() {
       google.script.run
-        .withSuccessHandler(populateCards)
-        .withFailureHandler(() => populateCards([]))
+        .withSuccessHandler(applyCardLists)
+        .withFailureHandler(() => applyCardLists({ defaults: [], custom: [] }))
         .getCardNames();
     }
 
-    function populateCards(names) {
+    // Repaints both the dropdown and the manage list from a {defaults, custom}
+    // payload, preserving the current selection when possible.
+    function applyCardLists(lists) {
+      const defaults = (lists && lists.defaults) || [];
+      customCards = (lists && lists.custom) || [];
+      const previous = cardSelect.value;
+
       cardSelect.innerHTML = '';
       const placeholder = document.createElement('option');
       placeholder.value = '';
       placeholder.disabled = true;
       placeholder.selected = true;
-      placeholder.textContent = names.length ? 'Select a card…' : 'No cards yet — add one';
+      placeholder.textContent = 'Select a card…';
       cardSelect.appendChild(placeholder);
 
-      (names || []).forEach(name => {
+      defaults.concat(customCards).forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
         opt.textContent = name;
@@ -93,20 +148,82 @@
       newOpt.value = NEW_CARD_VALUE;
       newOpt.textContent = '+ New card…';
       cardSelect.appendChild(newOpt);
+
+      // Restore selection if it still exists.
+      if (previous && previous !== NEW_CARD_VALUE) {
+        cardSelect.value = previous;
+      }
+      handleCardChange();
+      renderManageList();
     }
 
     function handleCardChange() {
       const isNew = cardSelect.value === NEW_CARD_VALUE;
-      newCardName.style.display = isNew ? 'block' : 'none';
+      newCardRow.style.display = isNew ? 'block' : 'none';
       if (isNew) newCardName.focus();
     }
 
-    // Resolves the chosen card name from either the dropdown or the new-card box.
-    function resolveCardName() {
-      if (cardSelect.value === NEW_CARD_VALUE) {
-        return newCardName.value.trim();
+    function addNewCard() {
+      const name = newCardName.value.trim();
+      if (!name) { newCardName.focus(); return; }
+      google.script.run
+        .withSuccessHandler(lists => {
+          newCardName.value = '';
+          applyCardLists(lists);
+          cardSelect.value = name; // select the freshly added card
+          handleCardChange();
+        })
+        .withFailureHandler(err => alert(err.message))
+        .addCard(name);
+    }
+
+    function toggleManage() {
+      manageList.style.display = (manageList.style.display === 'none') ? 'block' : 'none';
+    }
+
+    // Only user-added cards are removable; the pinned defaults have no ✕.
+    function renderManageList() {
+      manageList.innerHTML = '';
+      if (customCards.length === 0) {
+        const note = document.createElement('div');
+        note.className = 'muted';
+        note.style.fontSize = '0.85em';
+        note.textContent = 'No removable cards. The four built-in cards are permanent.';
+        manageList.appendChild(note);
+        return;
       }
-      return cardSelect.value;
+      customCards.forEach(name => {
+        const row = document.createElement('div');
+        row.className = 'card-chip';
+        const label = document.createElement('span');
+        label.textContent = name;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.textContent = '✕';
+        del.title = 'Remove from dropdown (keeps the tab and its data)';
+        del.onclick = () => removeCardUI(name);
+        row.appendChild(label);
+        row.appendChild(del);
+        manageList.appendChild(row);
+      });
+    }
+
+    function removeCardUI(name) {
+      google.script.run
+        .withSuccessHandler(lists => {
+          applyCardLists(lists);
+          manageList.style.display = 'block'; // keep the manage panel open
+        })
+        .withFailureHandler(err => alert(err.message))
+        .removeCard(name);
+    }
+
+    // Resolves the chosen card. The new-card box is committed via the Add button,
+    // so a valid selection is always a real card name in the dropdown.
+    function resolveCardName() {
+      const v = cardSelect.value;
+      if (!v || v === NEW_CARD_VALUE) return '';
+      return v;
     }
 
     loadCards();
@@ -145,7 +262,7 @@
     function uploadFile(file) {
       const cardName = resolveCardName();
       if (!cardName) {
-        alert('Please choose a card (or add a new one) before selecting or dropping a file.');
+        alert('Please pick a card from the dropdown first. To use a new card, choose "+ New card…", type its name, and click Add.');
         fileInput.value = "";
         return;
       }

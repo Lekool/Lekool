@@ -9,7 +9,7 @@ The script is built to handle CSV files from different credit card providers (sp
 ## Features
 
 - **Per-Card Tabs:** Each card gets its own sheet tab. Uploads for a card **append** into that card's existing tab, and the whole tab is re-sorted after every upload.
-- **Card Dropdown:** Pick the card from a dropdown in the upload dialog instead of typing a name each time. The list is self-maintaining — it's built from the tabs that already exist, plus a **"+ New card…"** option for the first upload of a new card.
+- **Card Dropdown:** Pick the card from a dropdown in the upload dialog instead of typing a name each time. The list is a fixed set of four built-in cards (`Chase Sapphire`, `Chase Amazon`, `Chase Unlimited`, `Amex`) plus any cards you add via **"+ New card…"**. Added cards can be removed under **"Manage cards"** (removal only takes the card off the dropdown — the tab and its data stay). The four built-ins are permanent.
 - **Duplicate Skipping:** When you upload an overlapping statement period, rows that exactly match an existing row (Transaction Date + Amount + Description + Type) are skipped, and the dialog reports how many were added vs. skipped.
 - **Smart Data Normalization:** Automatically processes data from different providers (Chase, Amex) and standardizes them into a consistent format.
   - Inverts amount signs where necessary to ensure charges are negative and credits/payments are positive.
@@ -57,7 +57,7 @@ Your sheet is now ready to use!
 
 1.  Click on the **"Finance Tool"** menu.
 2.  Select **"Load New CSV File"**.
-3.  In the dialog box, **pick the card** from the dropdown. For a card you haven't uploaded before, choose **"+ New card…"** and type its name (e.g. "Chase Sapphire", "Amex").
+3.  In the dialog box, **pick the card** from the dropdown. To add a card that isn't listed, choose **"+ New card…"**, type its name, and click **Add**. To tidy the list, open **"Manage cards"** and click ✕ next to an added card (this only removes it from the dropdown; its tab and data are kept).
 4.  **Drag and drop** your CSV file into the box, or click the file input to select it from your computer.
 5.  The script shows a "processing" message, then appends the new transactions to that card's tab, skips any exact duplicates, re-sorts the tab, and reports how many rows were added vs. skipped.
 

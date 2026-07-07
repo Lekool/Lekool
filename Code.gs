@@ -13,13 +13,75 @@ function onOpen() {
 }
 
 /**
- * Returns the names of the existing tabs so the upload dialog can build its
- * card dropdown. The list is self-maintaining: a tab created by a first upload
- * shows up here on the next one.
- * @returns {string[]} Existing sheet (card) names.
+ * The four built-in cards. Always present in the dropdown and cannot be removed.
+ * Adding a card here changes the pinned set for everyone using this spreadsheet.
+ */
+const DEFAULT_CARDS = ['Chase Sapphire', 'Chase Amazon', 'Chase Unlimited', 'Amex'];
+
+/** Document-properties key holding the JSON list of user-added (removable) cards. */
+const CUSTOM_CARDS_KEY = 'CUSTOM_CARDS';
+
+/**
+ * Reads the user-added card list from document properties. These are the
+ * removable cards; the pinned DEFAULT_CARDS are not stored here.
+ * @returns {string[]}
+ */
+function getCustomCards_() {
+  const raw = PropertiesService.getDocumentProperties().getProperty(CUSTOM_CARDS_KEY);
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/** Persists the user-added card list. */
+function setCustomCards_(arr) {
+  PropertiesService.getDocumentProperties().setProperty(CUSTOM_CARDS_KEY, JSON.stringify(arr));
+}
+
+/**
+ * Supplies the dropdown contents for the upload dialog. The list is a fixed set
+ * of pinned defaults plus any cards the user has added — it is NOT derived from
+ * the sheet tabs, so stray tabs never leak into the dropdown.
+ * @returns {{defaults: string[], custom: string[]}}
  */
 function getCardNames() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheets().map(s => s.getName());
+  return { defaults: DEFAULT_CARDS.slice(), custom: getCustomCards_() };
+}
+
+/**
+ * Adds a user card to the removable list. Rejects blanks and case-insensitive
+ * duplicates of either a pinned default or an existing custom card.
+ * @param {string} name
+ * @returns {{defaults: string[], custom: string[]}} The updated lists.
+ */
+function addCard(name) {
+  const clean = (name || '').trim();
+  if (!clean) throw new Error('Card name cannot be empty.');
+  const existingLower = DEFAULT_CARDS.concat(getCustomCards_()).map(n => n.toLowerCase());
+  if (existingLower.indexOf(clean.toLowerCase()) !== -1) {
+    throw new Error(`"${clean}" is already in the list.`);
+  }
+  const custom = getCustomCards_();
+  custom.push(clean);
+  setCustomCards_(custom);
+  return { defaults: DEFAULT_CARDS.slice(), custom: custom };
+}
+
+/**
+ * Removes a user-added card from the dropdown list. Non-destructive: the card's
+ * tab and its transactions (if any) are left untouched, so re-adding the same
+ * name reconnects to the existing tab. Pinned defaults are ignored.
+ * @param {string} name
+ * @returns {{defaults: string[], custom: string[]}} The updated lists.
+ */
+function removeCard(name) {
+  const custom = getCustomCards_().filter(n => n !== name);
+  setCustomCards_(custom);
+  return { defaults: DEFAULT_CARDS.slice(), custom: custom };
 }
 
 /**
